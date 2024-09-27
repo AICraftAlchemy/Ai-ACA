@@ -264,7 +264,7 @@ def create_streamlit_app(llm):
             st.write("🎉 Answer generated!")
             st.markdown(f"<div class='result-card'><h3>Answer:</h3><p>{answer}</p></div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='footer'>Built with 💖 by <a href='#'>Ai Craft Alchemy</a></div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer'>Built with 💖 by <a href='#'>Ai Craft Alchemy  | Contact :+91 7661081043</a></div>", unsafe_allow_html=True)
 
     # Animation
     st.markdown("<div class='animation'>🤖</div>", unsafe_allow_html=True)
