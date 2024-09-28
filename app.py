@@ -4,276 +4,192 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.exceptions import OutputParserException
+from langchain.chains import LLMChain
+from langchain.memory import ConversationBufferMemory
 import re
-import base64
-import time
-import random
 
 # Load environment variables
 load_dotenv()
 
 def clean_text(text):
     text = re.sub(r'<[^>]*?>', '', text)
-    text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\$$\$$,]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-    text = re.sub(r'[^a-zA-Z0-9 ]', '', text)
-    text = re.sub(r'\s{2,}', ' ', text)
-    text = text.strip()
-    text = ' '.join(text.split())
-    return text
+    text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-class Chain:
+class LlamaAIChain:
     def __init__(self):
-        self.llm = ChatGroq(temperature=0, groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama-3.2-3b-preview")
+        self.llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama-3.1-70b-versatile")
+        self.memory = ConversationBufferMemory(return_messages=True)
 
-    def answer_question(self, question):
-        prompt_question = PromptTemplate.from_template(
-            """
-            ### QUESTION:
+    def ask_question(self, question):
+        prompt = PromptTemplate(
+            input_variables=["history", "question"],
+            template="Chat History:\n{history}\nHuman: {question}\n\nAI: Let me think about that and provide a helpful response."
+        )
+        chain = LLMChain(llm=self.llm, prompt=prompt, memory=self.memory)
+        response = chain.run(question=question)
+        return response
+
+    def analyze_website(self, url, question):
+        loader = WebBaseLoader([url])
+        data = clean_text(loader.load()[0].page_content)
+        
+        prompt = PromptTemplate(
+            input_variables=["website_content", "question"],
+            template="""
+            Analyze the following website content and answer the user's question:
+
+            Website Content:
+            {website_content}
+
+            User's Question:
             {question}
 
-            ### INSTRUCTION:
-            Answer the question thoroughly based on your knowledge.
-            Provide an informative and accurate answer.
-
+            Provide a detailed and informative answer based on the website content:
             """
         )
-        chain_question = prompt_question | self.llm
-        res = chain_question.invoke(input={"question": question})
-        return res.content.strip()
+        
+        chain = LLMChain(llm=self.llm, prompt=prompt)
+        response = chain.run(website_content=data, question=question)
+        return response
 
-def set_theme(is_dark_mode):
-    if is_dark_mode:
-        st.markdown("""
-        <style>
-        :root {
-            --background-color: #121212;
-            --text-color: #E0E0E0;
-            --card-background: #1F1F1F;
-            --button-color: #BB86FC;
-            --button-hover: #3700B3;
-            --accent-color: #03DAC6;
-            --secondary-color: #03A9F4;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <style>
-        :root {
-            --background-color: #FFFFFF;
-            --text-color: #333333;
-            --card-background: #F9F9F9;
-            --button-color: #03A9F4;
-            --button-hover: #0288D1;
-            --accent-color: #FF4081;
-            --secondary-color: #4CAF50;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-def create_streamlit_app(llm):
-    st.set_page_config(page_title="AI ACA", page_icon="💡", layout="wide")
-
-    # Initialize session state for theme
-    if 'dark_mode' not in st.session_state:
-        st.session_state.dark_mode = True
-
-    # Apply theme
-    set_theme(st.session_state.dark_mode)
-
-    # Custom CSS for the app
+def set_page_config():
+    st.set_page_config(page_title="Llama AI Platform", page_icon="🦙", layout="wide")
     st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: var(--background-color);
-            color: var(--text-color);
-            transition: all 0.3s ease;
-        }
-        .stApp {
-            background-color: var(--background-color);
-        }
-        .main {
-            background-color: var(--background-color);
-        }
-        .title {
-            text-align: center;
-            color: var(--text-color);
-            font-size: 3.5em;
-            font-weight: 700;
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-            background: linear-gradient(45deg, var(--button-color), var(--accent-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .subtitle {
-            text-align: center;
-            color: var(--text-color);
-            font-size: 1.5em;
-            margin-bottom: 30px;
-            font-weight: 300;
-        }
-        .container {
-            padding: 30px;
-            max-width: 1000px;
-            margin: 0 auto;
-            background-color: var(--card-background);
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-        }
-        .input-box {
-            margin-bottom: 25px;
-        }
-        .input-box input, .input-box textarea {
-            width: 100%;
-            padding: 15px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background-color: var(--background-color);
-            color: var(--text-color);
-            font-size: 16px;
-            transition: all 0.3s ease;
-        }
-        .input-box input:focus, .input-box textarea:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px var(--accent-color);
-        }
-        .stButton > button {
-            background: linear-gradient(45deg, var(--button-color), var(--accent-color));
-            color: white;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            font-size: 18px;
-            font-weight: 700;
-            transition: all 0.3s ease;
-            width: 100%;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-        }
-        .result-card {
-            background-color: var(--card-background);
-            padding: 25px;
-            border-radius: 15px;
-            margin-top: 30px;
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-        .result-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
-        }
-        .result-card h3 {
-            color: var(--accent-color);
-            border-bottom: 2px solid var(--accent-color);
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            font-weight: 700;
-        }
-        .footer {
-            text-align: center;
-            color: var(--text-color);
-            font-size: 1em;
-            margin-top: 40px;
-            padding: 20px;
-            background-color: var(--card-background);
-            border-radius: 10px;
-            transition: all 0.3s ease;
-        }
-        .footer:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-        }
-        .footer a {
-            color: var(--accent-color);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            font-weight: 700;
-        }
-        .footer a:hover {
-            text-decoration: underline;
-        }
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--text-color);
-        }
-        .animation {
-            animation: animate 2s infinite;
-        }
-        @keyframes animate {
-            0% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.1);
-            }
-            100% {
-                transform: scale(1);
-            }
-        }
+    .stApp {
+        max-width: 1200px;
+        margin: 0 auto;
+        font-family: Arial, sans-serif;
+    }
+    .main-title {
+        color: #4a4a4a;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    .section-title {
+        color: #2c3e50;
+        margin-top: 30px;
+        margin-bottom: 20px;
+    }
+    .response-area {
+        background-color: #f0f0f0;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .stTextInput>div>div>textarea {
+        min-height: 100px;
+    }
+    .chat-message {
+        padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem; display: flex
+    }
+    .chat-message.user {
+        background-color: #2b313e
+    }
+    .chat-message.bot {
+        background-color: #475063
+    }
+    .chat-message .avatar {
+      width: 20%;
+    }
+    .chat-message .avatar img {
+      max-width: 78px;
+      max-height: 78px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .chat-message .message {
+      width: 80%;
+      padding: 0 1.5rem;
+      color: #fff;
+    }
+    .toggle-button {
+        position: absolute;
+        top: 10px;
+        left: 100px;
+        z-index: 1000;
+    }
+    .footer {
+        text-align: center;
+        padding: 20px 0;
+        font-size: 14px;
+        color: #666;
+        border-top: 1px solid #eee;
+        margin-top: 40px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    # Theme toggle
-    col1, col2 = st.columns([4, 1])
-    with col2:
-        st.markdown("""
-        <div class="toggle-container">
-            <span class="toggle-label">Dark Mode</span>
-            <label class="toggle-switch">
-                <input type="checkbox" id="theme-toggle">
-                <span class="toggle-slider"></span>
-            </label>
-        </div>
-        """, unsafe_allow_html=True)
+def chat_interface():
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-        if st.button("Toggle Theme", key="theme_toggle"):
-            st.session_state.dark_mode = not st.session_state.dark_mode
-            st.experimental_rerun()
+    question = st.chat_input("Enter your question:")
+    if question:
+        with st.chat_message("user"):
+            st.markdown(question)
+        st.session_state.chat_history.append({"role": "user", "content": question})
 
-    st.markdown("<div class='title'>💡 AI ACA</div>", unsafe_allow_html=True)
-    st.markdown("<div class='subtitle'>Ask any question and get an AI-powered answer.</div>", unsafe_allow_html=True)
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                answer = st.session_state.llama_chain.ask_question(question)
+                st.markdown(answer)
+        st.session_state.chat_history.append({"role": "assistant", "content": answer})
 
-    # Detect Enter key for submission
-    question = st.text_area("Type your question below", height=150, key="question_input")
-    if st.button("Submit") or (st.session_state.get("question_input") and st.session_state.get("question_input").strip()):
-        with st.spinner("Processing..."):
-            st.write("🤔 Analyzing your question...")
-            time.sleep(1)
-            st.write("🔍 Searching for relevant information...")
-            time.sleep(1)
-            st.write("💡 Generating answer...")
-            time.sleep(1)
-            answer = llm.answer_question(question)
-            st.write("🎉 Answer generated!")
-            st.markdown(f"<div class='result-card'><h3>Answer:</h3><p>{answer}</p></div>", unsafe_allow_html=True)
+def website_analysis_interface():
+    url = st.text_input("Enter website URL:")
+    website_question = st.text_area("Enter your question about the website:", height=100, key="website_question_input")
+    if st.button("Analyze"):
+        if url and website_question:
+            with st.spinner("Analyzing website..."):
+                analysis = st.session_state.llama_chain.analyze_website(url, website_question)
+                st.markdown("<div class='response-area'>", unsafe_allow_html=True)
+                st.write("Analysis:", analysis)
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.warning("Please enter both a URL and a question.")
 
+def create_streamlit_app():
+    set_page_config()
+    
+    if 'llama_chain' not in st.session_state:
+        st.session_state.llama_chain = LlamaAIChain()
+
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+
+    if 'current_interface' not in st.session_state:
+        st.session_state.current_interface = "chat"
+
+    # Toggle button at the top left
+    st.markdown("<div class='toggle-button'>", unsafe_allow_html=True)
+    button_label = "Switch to Web Analyzer" if st.session_state.current_interface == "chat" else "Switch to Chat with AI"
+    if st.button(button_label):
+        st.session_state.current_interface = "website" if st.session_state.current_interface == "chat" else "chat"
+        st.experimental_rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<h1 class='main-title'>🦙 Llama AI Platform by Ai Craft Alchemy</h1>", unsafe_allow_html=True)
+
+    # Main content area
+    if st.session_state.current_interface == "chat":
+        st.markdown("<h2 class='section-title'>Chat with AI ACA</h2>", unsafe_allow_html=True)
+        chat_interface()
+    else:
+        st.markdown("<h2 class='section-title'>Analyze Website</h2>", unsafe_allow_html=True)
+        website_analysis_interface()
+
+    # Add footer
     st.markdown("""
-    <div class='footer'> 
-        Developed by <a href='https://aicraftalchemy.github.io'>Ai Craft Alchemy</a><br>
-        Connect with us: <a href='tel:+917661081043'>+91 7661081043</a>
+    <div class='footer'>
+    Developed  by  <a href='https://aicraftalchemy.github.io'>Ai Craft Alchemy</a><br>
+    Connect with us: <a href='tel:+917661081043'>+91 7661081043</a>
     </div>
     """, unsafe_allow_html=True)
 
-    # Animation
-    st.markdown("<div class='animation'>🤖</div>", unsafe_allow_html=True)
-
-if __name__ == '__main__':
-    chain = Chain()
-    create_streamlit_app(chain)
+if __name__ == "__main__":
+    create_streamlit_app()
