@@ -177,7 +177,7 @@ def create_streamlit_app():
 
     # Main content area
     if st.session_state.current_interface == "chat":
-        st.markdown("<h2 class='section-title'>Chat with AI ACA</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 class='section-title'>Interact with AI ACA</h2>", unsafe_allow_html=True)
         chat_interface()
     else:
         st.markdown("<h2 class='section-title'>Analyze Website</h2>", unsafe_allow_html=True)
