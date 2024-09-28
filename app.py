@@ -56,7 +56,7 @@ class LlamaAIChain:
         return response
 
 def set_page_config():
-    st.set_page_config(page_title="Llama AI Platform", page_icon="🦙", layout="wide")
+    st.set_page_config(page_title="AI ACA", page_icon="✨", layout="wide")
     st.markdown("""
     <style>
     .stApp {
@@ -173,7 +173,7 @@ def create_streamlit_app():
         st.experimental_rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<h1 class='main-title'>🦙 Llama AI Platform by Ai Craft Alchemy</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>✨ AI Platform by Ai Craft Alchemy</h1>", unsafe_allow_html=True)
 
     # Main content area
     if st.session_state.current_interface == "chat":
