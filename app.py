@@ -20,7 +20,7 @@ def clean_text(text):
 
 class LlamaAIChain:
     def __init__(self):
-        self.llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama-3.1-70b-versatile")
+        self.llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama-3.2-90b-text-preview")
         self.memory = ConversationBufferMemory(return_messages=True)
 
     def ask_question(self, question):
