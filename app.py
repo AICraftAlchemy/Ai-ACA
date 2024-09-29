@@ -124,6 +124,9 @@ def set_page_config():
         margin-top: 40px;
     }
     .stDeployButton {display: none;}
+    .viewerBadge_container__1QSob {display: none;}
+    .viewerBadge_link__1S137 {display: none;}
+    #stDecoration {display: none;}
     </style>
     """, unsafe_allow_html=True)
 
