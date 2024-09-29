@@ -59,6 +59,9 @@ def set_page_config():
     st.set_page_config(page_title="AI ACA", page_icon="✨", layout="wide")
     st.markdown("""
     <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     .stApp {
         max-width: 1200px;
         margin: 0 auto;
@@ -109,7 +112,7 @@ def set_page_config():
     .toggle-button {
         position: absolute;
         top: 10px;
-        left: 100px;
+        left: 10px;
         z-index: 1000;
     }
     .footer {
@@ -120,6 +123,7 @@ def set_page_config():
         border-top: 1px solid #eee;
         margin-top: 40px;
     }
+    .stDeployButton {display: none;}
     </style>
     """, unsafe_allow_html=True)
 
