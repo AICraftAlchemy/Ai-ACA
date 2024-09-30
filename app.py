@@ -165,7 +165,7 @@ def chat_interface():
                     st.markdown(answer)
                     st.session_state.chat_history.append({"role": "assistant", "type": "text", "content": answer})
                 else:
-                    image = generate_image(question)
+                    image = generate_image(question, width=256, height=256)  # Specify size here
                     st.image(image, caption="Generated Image", use_column_width=True)
                     st.session_state.chat_history.append({"role": "assistant", "type": "image", "content": image})
 
@@ -182,7 +182,7 @@ def website_analysis_interface():
         else:
             st.warning("Please enter both a URL and a question.")
 
-def generate_image(prompt):
+def generate_image(prompt, width=512, height=512):
     API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
     headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
 
@@ -194,7 +194,12 @@ def generate_image(prompt):
         "inputs": prompt,
     })
 
-    return Image.open(io.BytesIO(image_bytes))
+    image = Image.open(io.BytesIO(image_bytes))
+
+    # Resize the image to the specified width and height
+    resized_image = image.resize((width, height))
+
+    return resized_image
 
 def create_streamlit_app():
     set_page_config()
@@ -239,12 +244,14 @@ def create_streamlit_app():
             if st.button("🔄 Swap", key="swap_mode", help="Switch between chat and image generation"):
                 st.session_state.current_mode = "image" if st.session_state.current_mode == "chat" else "chat"
                 st.experimental_rerun()
-    
+
     with col2:
-        button_label = "Switch to Web Analyzer" if st.session_state.current_interface == "chat" else "Switch to Chat with AI"
-        if st.button(button_label, key="swap_interface"):
+        interface_label = "Chat Interface" if st.session_state.current_interface == "chat" else "Website Analysis"
+        st.markdown(f'<span class="mode-indicator">{interface_label}</span>', unsafe_allow_html=True)
+        if st.button("🔄 Swap to Website Analysis", key="swap_interface"):
             st.session_state.current_interface = "website" if st.session_state.current_interface == "chat" else "chat"
             st.experimental_rerun()
 
+# Run the app
 if __name__ == "__main__":
     create_streamlit_app()
