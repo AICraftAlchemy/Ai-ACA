@@ -183,7 +183,7 @@ def website_analysis_interface():
             st.warning("Please enter both a URL and a question.")
 
 def generate_image(prompt):
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    API_URL = "https://api-inference.huggingface.co/models/XLabs-AI/flux-RealismLora"
     headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
 
     def query(payload):
