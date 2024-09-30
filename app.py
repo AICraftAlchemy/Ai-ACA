@@ -7,6 +7,9 @@ from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from langchain.memory import ConversationBufferMemory
 import re
+import requests
+import io
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -56,7 +59,7 @@ class LlamaAIChain:
         return response
 
 def set_page_config():
-    st.set_page_config(page_title="AI ACA", page_icon="✨", layout="wide")
+    st.set_page_config(page_title="AI ACA", page_icon="✨", layout="wide", menu_items=None)
     st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -109,12 +112,6 @@ def set_page_config():
       padding: 0 1.5rem;
       color: #fff;
     }
-    .toggle-button {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 1000;
-    }
     .footer {
         text-align: center;
         padding: 20px 0;
@@ -123,26 +120,54 @@ def set_page_config():
         border-top: 1px solid #eee;
         margin-top: 40px;
     }
-    .stDeployButton {display: none;}
+    .swap-button {
+        margin-top: 10px;
+    }
+    .input-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .mode-label {
+        font-weight: bold;
+        margin-right: 10px;
+    }
+    .mode-indicator {
+        font-weight: bold;
+        margin-left: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 def chat_interface():
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["type"] == "text":
+                st.markdown(message["content"])
+            elif message["type"] == "image":
+                st.image(message["content"], caption="Generated Image", use_column_width=True)
 
-    question = st.chat_input("Enter your question:")
+    st.markdown('<div class="input-container">', unsafe_allow_html=True)
+    
+    question = st.chat_input("Enter your question or image prompt:")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
     if question:
         with st.chat_message("user"):
             st.markdown(question)
-        st.session_state.chat_history.append({"role": "user", "content": question})
+        st.session_state.chat_history.append({"role": "user", "type": "text", "content": question})
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                answer = st.session_state.llama_chain.ask_question(question)
-                st.markdown(answer)
-        st.session_state.chat_history.append({"role": "assistant", "content": answer})
+            with st.spinner("Processing..."):
+                if st.session_state.current_mode == "chat":
+                    answer = st.session_state.llama_chain.ask_question(question)
+                    st.markdown(answer)
+                    st.session_state.chat_history.append({"role": "assistant", "type": "text", "content": answer})
+                else:
+                    image = generate_image(question)
+                    st.image(image, caption="Generated Image", use_column_width=True)
+                    st.session_state.chat_history.append({"role": "assistant", "type": "image", "content": image})
 
 def website_analysis_interface():
     url = st.text_input("Enter website URL:")
@@ -157,6 +182,20 @@ def website_analysis_interface():
         else:
             st.warning("Please enter both a URL and a question.")
 
+def generate_image(prompt):
+    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    headers = {"Authorization": f"Bearer {os.getenv('HUGGINGFACE_API_KEY')}"}
+
+    def query(payload):
+        response = requests.post(API_URL, headers=headers, json=payload)
+        return response.content
+
+    image_bytes = query({
+        "inputs": prompt,
+    })
+
+    return Image.open(io.BytesIO(image_bytes))
+
 def create_streamlit_app():
     set_page_config()
     
@@ -169,15 +208,10 @@ def create_streamlit_app():
     if 'current_interface' not in st.session_state:
         st.session_state.current_interface = "chat"
 
-    # Toggle button at the top left
-    st.markdown("<div class='toggle-button'>", unsafe_allow_html=True)
-    button_label = "Switch to Web Analyzer" if st.session_state.current_interface == "chat" else "Switch to Chat with AI"
-    if st.button(button_label):
-        st.session_state.current_interface = "website" if st.session_state.current_interface == "chat" else "chat"
-        st.experimental_rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+    if 'current_mode' not in st.session_state:
+        st.session_state.current_mode = "chat"
 
-    st.markdown("<h1 class='main-title'>✨ AI ACA Platform by Ai Craft Alchemy</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>✨ AI Platform by Ai Craft Alchemy</h1>", unsafe_allow_html=True)
 
     # Main content area
     if st.session_state.current_interface == "chat":
@@ -187,13 +221,30 @@ def create_streamlit_app():
         st.markdown("<h2 class='section-title'>Analyze Website</h2>", unsafe_allow_html=True)
         website_analysis_interface()
 
-    # Add footer
+    # Footer with swap buttons
     st.markdown("""
     <div class='footer'>
-    Developed  by  <a href='https://aicraftalchemy.github.io'>Ai Craft Alchemy</a><br>
+    Developed by <a href='https://aicraftalchemy.github.io'>Ai Craft Alchemy</a><br>
     Connect with us: <a href='tel:+917661081043'>+91 7661081043</a>
     </div>
     """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    
+    # Only show the swap chat/image button when in chat interface
+    if st.session_state.current_interface == "chat":
+        with col1:
+            mode_label = "AI Chat 🤖" if st.session_state.current_mode == "chat" else "Image Generator 🖼️"
+            st.markdown(f'<span class="mode-indicator">{mode_label}</span>', unsafe_allow_html=True)
+            if st.button("🔄 Swap", key="swap_mode", help="Switch between chat and image generation"):
+                st.session_state.current_mode = "image" if st.session_state.current_mode == "chat" else "chat"
+                st.experimental_rerun()
+    
+    with col2:
+        button_label = "Switch to Web Analyzer" if st.session_state.current_interface == "chat" else "Switch to Chat with AI"
+        if st.button(button_label, key="swap_interface"):
+            st.session_state.current_interface = "website" if st.session_state.current_interface == "chat" else "chat"
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     create_streamlit_app()
