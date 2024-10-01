@@ -236,10 +236,10 @@ def create_streamlit_app():
         with col1:
             if st.session_state.current_mode == "chat":
                 mode_label = "AI Chat 🤖"
-                swap_label = "Swap for Image Generator 🖼️"
+                swap_label = "🔄Swap for Image Generator 🖼️"
             else:
                 mode_label = "Image Generator 🖼️"
-                swap_label = "Swap to Interact with AI ACA 🤖"
+                swap_label = "🔄Swap to Interact with AI ACA 🤖"
             
             st.markdown(f'<span class="mode-indicator">{mode_label}</span>', unsafe_allow_html=True)
             if st.button(swap_label, key="swap_mode", help="Switch between chat and image generation"):
