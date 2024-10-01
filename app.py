@@ -10,6 +10,7 @@ import re
 import requests
 import io
 from PIL import Image
+from langchain.schema import AIMessage
 
 # Load environment variables
 load_dotenv()
@@ -23,8 +24,21 @@ def clean_text(text):
 
 class LlamaAIChain:
     def __init__(self):
-        self.llm = ChatGroq(temperature=0.7, groq_api_key=os.getenv("GROQ_API_KEY"), model_name="llama-3.1-70b-versatile")
+        self.api_keys = [os.getenv("GROQ_API_KEY"), os.getenv("GROQ_API_KEY_1")]
+        self.current_api_key_index = 0
+        self.llm = self._create_llm()
         self.memory = ConversationBufferMemory(return_messages=True)
+
+    def _create_llm(self):
+        return ChatGroq(
+            temperature=0.7,
+            groq_api_key=self.api_keys[self.current_api_key_index],
+            model_name="llama-3.1-70b-versatile"
+        )
+
+    def _switch_api_key(self):
+        self.current_api_key_index = (self.current_api_key_index + 1) % len(self.api_keys)
+        self.llm = self._create_llm()
 
     def ask_question(self, question):
         prompt = PromptTemplate(
@@ -32,8 +46,16 @@ class LlamaAIChain:
             template="Chat History:\n{history}\nHuman: {question}\n\nAI: Let me think about that and provide a helpful response."
         )
         chain = LLMChain(llm=self.llm, prompt=prompt, memory=self.memory)
-        response = chain.run(question=question)
-        return response
+        
+        try:
+            response = chain.run(question=question)
+            return response
+        except Exception as e:
+            if "RateLimitError: Error code: 429" in str(e) and self.current_api_key_index < len(self.api_keys) - 1:
+                self._switch_api_key()
+                return self.ask_question(question)  # Retry with new API key
+            else:
+                raise e
 
     def analyze_website(self, url, question):
         loader = WebBaseLoader([url])
@@ -55,8 +77,16 @@ class LlamaAIChain:
         )
         
         chain = LLMChain(llm=self.llm, prompt=prompt)
-        response = chain.run(website_content=data, question=question)
-        return response
+        
+        try:
+            response = chain.run(website_content=data, question=question)
+            return response
+        except Exception as e:
+            if "RateLimitError: Error code: 429" in str(e) and self.current_api_key_index < len(self.api_keys) - 1:
+                self._switch_api_key()
+                return self.analyze_website(url, question)  # Retry with new API key
+            else:
+                raise e
 
 def set_page_config():
     st.set_page_config(page_title="AI ACA", page_icon="✨", layout="wide", menu_items=None)
@@ -160,14 +190,18 @@ def chat_interface():
 
         with st.chat_message("assistant"):
             with st.spinner("Processing..."):
-                if st.session_state.current_mode == "chat":
-                    answer = st.session_state.llama_chain.ask_question(question)
-                    st.markdown(answer)
-                    st.session_state.chat_history.append({"role": "assistant", "type": "text", "content": answer})
-                else:
-                    image = generate_image(question)
-                    st.image(image, caption="Generated Image", use_column_width=True)
-                    st.session_state.chat_history.append({"role": "assistant", "type": "image", "content": image})
+                try:
+                    if st.session_state.current_mode == "chat":
+                        answer = st.session_state.llama_chain.ask_question(question)
+                        st.markdown(answer)
+                        st.session_state.chat_history.append({"role": "assistant", "type": "text", "content": answer})
+                    else:
+                        image = generate_image(question)
+                        st.image(image, caption="Generated Image", use_column_width=True)
+                        st.session_state.chat_history.append({"role": "assistant", "type": "image", "content": image})
+                except Exception as e:
+                    st.error("Please refresh the page and try again in a few minutes.")
+                    st.session_state.chat_history.append({"role": "assistant", "type": "text", "content": "An error occurred. Please try again later."})
 
 def website_analysis_interface():
     url = st.text_input("Enter website URL:")
@@ -175,10 +209,13 @@ def website_analysis_interface():
     if st.button("Analyze"):
         if url and website_question:
             with st.spinner("Analyzing website..."):
-                analysis = st.session_state.llama_chain.analyze_website(url, website_question)
-                st.markdown("<div class='response-area'>", unsafe_allow_html=True)
-                st.write("Analysis:", analysis)
-                st.markdown("</div>", unsafe_allow_html=True)
+                try:
+                    analysis = st.session_state.llama_chain.analyze_website(url, website_question)
+                    st.markdown("<div class='response-area'>", unsafe_allow_html=True)
+                    st.write("Analysis:", analysis)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                except Exception as e:
+                    st.error("Please refresh the page and try again in a few minutes.")
         else:
             st.warning("Please enter both a URL and a question.")
 
@@ -190,11 +227,14 @@ def generate_image(prompt):
         response = requests.post(API_URL, headers=headers, json=payload)
         return response.content
 
-    image_bytes = query({
-        "inputs": prompt,
-    })
-
-    return Image.open(io.BytesIO(image_bytes))
+    try:
+        image_bytes = query({
+            "inputs": prompt,
+        })
+        return Image.open(io.BytesIO(image_bytes))
+    except Exception as e:
+        st.error("Please refresh the page and try again in a few minutes.")
+        return None
 
 def create_streamlit_app():
     set_page_config()
@@ -234,9 +274,15 @@ def create_streamlit_app():
     # Only show the swap chat/image button when in chat interface
     if st.session_state.current_interface == "chat":
         with col1:
-            mode_label = "AI Chat 🤖" if st.session_state.current_mode == "chat" else "Image Generator 🖼️"
+            if st.session_state.current_mode == "chat":
+                mode_label = "AI Chat 🤖"
+                swap_label = "🔄 Swap for Image Generator 🖼️"
+            else:
+                mode_label = "Image Generator 🖼️"
+                swap_label = "🔄 Swap to Interact with AI ACA 🤖"
+            
             st.markdown(f'<span class="mode-indicator">{mode_label}</span>', unsafe_allow_html=True)
-            if st.button("🔄 Swap", key="swap_mode", help="Switch between chat and image generation"):
+            if st.button(swap_label, key="swap_mode", help="Switch between chat and image generation"):
                 st.session_state.current_mode = "image" if st.session_state.current_mode == "chat" else "chat"
                 st.experimental_rerun()
     
